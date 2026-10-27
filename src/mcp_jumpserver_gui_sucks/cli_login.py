@@ -268,6 +268,25 @@ class JumpServerCLILogin:
         self._client.headers["X-CSRFToken"] = csrf_token
         return csrf_token
 
+    def _sync_session_api_headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        """Align CSRF header with the live cookie jar after web login redirects."""
+        headers = dict(extra or {})
+        csrf_token = self._client.cookies.get("jms_csrftoken")
+        if not csrf_token:
+            csrf_token = headers.get("X-CSRFToken") or self._client.headers.get(
+                "X-CSRFToken", ""
+            )
+        if not csrf_token:
+            raise LoginFlowError("The current login session does not have a CSRF token.")
+        headers["X-CSRFToken"] = csrf_token
+        self._client.headers["X-CSRFToken"] = csrf_token
+        headers.setdefault("Referer", self._absolute_url("/ui/"))
+        headers.setdefault("Origin", self._base_url)
+        org = self._client.headers.get("X-JMS-ORG") or self._client.cookies.get("X-JMS-ORG")
+        if org:
+            headers.setdefault("X-JMS-ORG", org)
+        return headers
+
     def encrypt_password(self, password: str) -> str:
         public_key_cookie = self._client.cookies.get("jms_public_key", "")
         return encrypt_password(password, public_key_cookie)
@@ -437,6 +456,7 @@ class JumpServerCLILogin:
         LOGGER.info("Submitting primary authentication request for %s.", username)
         response = self._client.post(
             AUTH_API_PATH,
+            headers=self._sync_session_api_headers(),
             json={"username": username, "password": password},
         )
         raise_for_unexpected_status(response, {200, 400})
@@ -447,7 +467,11 @@ class JumpServerCLILogin:
 
     def issue_bearer_token(self) -> dict[str, Any]:
         LOGGER.info("Requesting bearer token from the authenticated session.")
-        response = self._client.post(AUTH_API_PATH, json={})
+        response = self._client.post(
+            AUTH_API_PATH,
+            headers=self._sync_session_api_headers(),
+            json={},
+        )
         raise_for_unexpected_status(response, {200, 201, 400})
         payload = extract_response_json(response)
         if not isinstance(payload, dict):
@@ -458,7 +482,11 @@ class JumpServerCLILogin:
 
     def send_mfa_code(self, *, mfa_type: str) -> None:
         LOGGER.info("Requesting MFA challenge for type %s.", mfa_type)
-        response = self._client.post(MFA_SEND_CODE_PATH, json={"type": mfa_type})
+        response = self._client.post(
+            MFA_SEND_CODE_PATH,
+            headers=self._sync_session_api_headers(),
+            json={"type": mfa_type},
+        )
         raise_for_unexpected_status(response, {200, 201})
         payload = extract_response_json(response)
         if isinstance(payload, dict) and payload.get("error"):
@@ -468,6 +496,7 @@ class JumpServerCLILogin:
         LOGGER.info("Submitting MFA verification for type %s.", mfa_type)
         response = self._client.post(
             MFA_VERIFY_PATH,
+            headers=self._sync_session_api_headers(),
             json={"type": mfa_type, "code": code},
         )
         raise_for_unexpected_status(response, {200, 401})
@@ -504,7 +533,7 @@ class JumpServerCLILogin:
         response = self._client.get(
             CONFIRM_API_PATH,
             params={"confirm_type": confirm_type},
-            headers=headers,
+            headers=self._sync_session_api_headers(headers),
         )
         raise_for_unexpected_status(response, {200, 400})
         payload = extract_response_json(response)
@@ -529,9 +558,9 @@ class JumpServerCLILogin:
             headers["Authorization"] = f"{bearer_keyword} {bearer_token}"
         response = self._client.post(
             CONFIRM_API_PATH,
-            headers=headers,
+            headers=self._sync_session_api_headers(headers),
             json={
-                "confirm_type": "password",
+                "confirm_type": confirm_type,
                 "mfa_type": mfa_type,
                 "secret_key": secret_key,
             },
@@ -558,7 +587,7 @@ class JumpServerCLILogin:
             headers["Authorization"] = f"{bearer_keyword} {bearer_token}"
         response = self._client.post(
             ACCESS_KEYS_API_PATH,
-            headers=headers,
+            headers=self._sync_session_api_headers(headers),
             json={"ip_group": ip_group or ["*"]},
         )
         raise_for_unexpected_status(response, {201, 400})
