@@ -18,3 +18,8 @@ def configure_logging(level: str) -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     _CONFIGURED = True
+
+
+def set_package_log_level(level: str) -> None:
+    numeric = getattr(logging, level.upper(), logging.INFO)
+    logging.getLogger("mcp_jumpserver_gui_sucks").setLevel(numeric)

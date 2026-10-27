@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from .auth_state import AuthState, CookieState
 from .cli_login import run_cli_login
 from .config import Settings
-from .logging_utils import configure_logging
+from .logging_utils import configure_logging, set_package_log_level
 from .service import (
     acquire_terminal_session_payload,
     build_paths_payload,
@@ -209,6 +209,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=10.0,
         help="Hard timeout for each shell read step.",
+    )
+    terminal_shell_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print INFO diagnostics (KoKo read/write logs) during the interactive shell.",
     )
 
     resolve_target_parser = subparsers.add_parser(
@@ -590,6 +595,8 @@ async def interactive_terminal_shell(args: argparse.Namespace) -> int:
 
 
 def terminal_shell_command(args: argparse.Namespace) -> int:
+    if not args.verbose:
+        set_package_log_level("WARNING")
     return asyncio.run(interactive_terminal_shell(args))
 
 
