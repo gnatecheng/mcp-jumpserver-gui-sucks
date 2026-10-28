@@ -884,6 +884,7 @@ async def acquire_terminal_session_payload(
     cols: int = 120,
     rows: int = 32,
     startup_idle_timeout_seconds: float = 1.5,
+    reuse_existing: bool = True,
 ) -> dict[str, Any]:
     settings, _, auth_state, terminal_auth = await ensure_terminal_auth_state(
         force_refresh=True,
@@ -908,7 +909,7 @@ async def acquire_terminal_session_payload(
         cols=cols,
         rows=rows,
         startup_idle_timeout_seconds=startup_idle_timeout_seconds,
-        reuse_existing=True,
+        reuse_existing=reuse_existing,
     )
     payload["resolved_target"] = resolved_target
     payload["terminal_auth"] = terminal_auth
